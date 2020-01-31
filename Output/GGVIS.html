@@ -1,0 +1,119 @@
+<!-- Sankey generated in R 3.5.1 by googleVis 0.6.3 package -->
+<!-- Mon Dec 17 23:00:58 2018 -->
+
+
+<!-- jsHeader -->
+<script type="text/javascript">
+ 
+// jsData 
+function gvisDataSankeyIDff44a9239df () {
+var data = new google.visualization.DataTable();
+var datajson =
+[
+ [
+"Segment A",
+"No",
+86
+],
+[
+"Segment A",
+"Yes",
+262
+],
+[
+"Segment B",
+"No",
+84
+],
+[
+"Segment B",
+"Yes",
+241
+],
+[
+"Segment C",
+"No",
+84
+],
+[
+"Segment C",
+"Yes",
+243
+] 
+];
+data.addColumn('string','Segments');
+data.addColumn('string','Use_Product');
+data.addColumn('number','n');
+data.addRows(datajson);
+return(data);
+}
+ 
+// jsDrawChart
+function drawChartSankeyIDff44a9239df() {
+var data = gvisDataSankeyIDff44a9239df();
+var options = {};
+options["width"] = 400;
+options["height"] = 400;
+options["sankey"] = {link: {color: { fill: '#d799ae' } },
+                            node: { color: { fill: '#a61d4c' },
+                            label: { color: '#871b47' } }};
+
+
+    var chart = new google.visualization.Sankey(
+    document.getElementById('SankeyIDff44a9239df')
+    );
+    chart.draw(data,options);
+    
+
+}
+  
+ 
+// jsDisplayChart
+(function() {
+var pkgs = window.__gvisPackages = window.__gvisPackages || [];
+var callbacks = window.__gvisCallbacks = window.__gvisCallbacks || [];
+var chartid = "sankey";
+  
+// Manually see if chartid is in pkgs (not all browsers support Array.indexOf)
+var i, newPackage = true;
+for (i = 0; newPackage && i < pkgs.length; i++) {
+if (pkgs[i] === chartid)
+newPackage = false;
+}
+if (newPackage)
+  pkgs.push(chartid);
+  
+// Add the drawChart function to the global list of callbacks
+callbacks.push(drawChartSankeyIDff44a9239df);
+})();
+function displayChartSankeyIDff44a9239df() {
+  var pkgs = window.__gvisPackages = window.__gvisPackages || [];
+  var callbacks = window.__gvisCallbacks = window.__gvisCallbacks || [];
+  window.clearTimeout(window.__gvisLoad);
+  // The timeout is set to 100 because otherwise the container div we are
+  // targeting might not be part of the document yet
+  window.__gvisLoad = setTimeout(function() {
+  var pkgCount = pkgs.length;
+  google.load("visualization", "1", { packages:pkgs, callback: function() {
+  if (pkgCount != pkgs.length) {
+  // Race condition where another setTimeout call snuck in after us; if
+  // that call added a package, we must not shift its callback
+  return;
+}
+while (callbacks.length > 0)
+callbacks.shift()();
+} });
+}, 100);
+}
+ 
+// jsFooter
+</script>
+ 
+<!-- jsChart -->  
+<script type="text/javascript" src="https://www.google.com/jsapi?callback=displayChartSankeyIDff44a9239df"></script>
+ 
+<!-- divChart -->
+  
+<div id="SankeyIDff44a9239df" 
+  style="width: 400; height: 400;">
+</div>

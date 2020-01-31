@@ -1,0 +1,298 @@
+---
+title: "Visualising Product Penetration through Sankey diagrams"
+author: "Martin Chan"
+date: "17 Dec 2018"
+output: html_notebook
+---
+
+There is a large array of packages and methods available in R to create sankey diagrams (AKA alluvial graphs or riverplots), however each of these exhibit different features (e.g. interactivity, format of input) and therefore will be suited for different purposes. Examples of these methods include: 
+- alluvial package
+- ggalluvial package
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(svglite)
+devtools::source_gist("https://gist.github.com/martinctc/53444d4847055a870417f5b279f1b8bd", filename="surveyr.R")
+```
+
+In order to test the various visualisation methods against a 'realistic' dataset, we've simulated a dataset that contains the following key variables, reflecting a market for insurance benefits:
+- Segment - Segment A, Segment B, etc.
+- Ownership status - Own product, Do not own
+- Channel - Own it through employer vs spouse vs direct
+- Consideration - consider to take out a product, IF the product is not owned
+
+The simulated dataset looks like this:
+
+```{r}
+set.seed(100)
+tibble::tibble(id=1:1000,
+               segment=sample(c("Segment A","Segment B"),1000,replace=TRUE,prob=c(0.35,0.65)),
+               own_product=sample(c("Own","Do not own"),1000,replace=TRUE,prob=c(0.3,0.7)),
+               random=sample(1:10,1000,replace=TRUE)) %>%
+  mutate(own_status=case_when(own_product=="Own" & random>=5~"Through employer",
+                              own_product=="Own" & random>=3~"Through spouse",
+                              own_product=="Own"~"Direct",
+                              TRUE~NA_character_)) %>%
+  mutate(consider_status=case_when(own_product=="Do not own" & random>=5~"Consider",
+                              own_product=="Do not own"~"Do not consider",
+                              TRUE~NA_character_)) %>%
+  select(-random)-> sample_df1
+
+sample_df1 %>% head()
+
+sample_df1 %>%
+  count(segment,own_product,own_status,consider_status) -> sample_df1_summed
+
+```
+
+The ggalluvial package provides an easy way to create these sankey diagrams. The code is straightforward and is consistent with the 'grammar of graphics' style of syntax, but perhaps due to the fact that too much information is being displayed, this graphic is not easy to read, and it is not exactly clear what is going on. As a first prototype, this offers us a basis to build more intuitive sankey visualisations.
+
+
+```{r message=FALSE, warning=FALSE}
+require(ggalluvial)
+require(ggrepel)
+sample_df1_summed %>%
+  mutate(status=paste0(own_product,", ",own_status,", ",consider_status)) %>%
+  mutate_at(vars(status),funs(str_remove_all(.," NA"))) %>%
+  mutate_at(vars(status),funs(str_remove_all(.," NA"))) %>%
+  mutate_at(vars(status),funs(str_replace_all(.,",,",","))) %>%
+  
+  mutate_at(vars(status),funs(ifelse(str_right(.,1)==",",str_sub(.,1,nchar(.)-1),.))) %>%
+  mutate_at(vars(segment,own_product,own_status,consider_status),funs(str_replace_all(.," ","\n "))) %>%
+  ggplot(aes(y=n,axis1=segment,axis2=own_status,axis3=consider_status))+
+  geom_alluvium(aes(fill=status),colour="black",width=1/12) +
+  geom_stratum(width=1/3,fill="white",color="grey",alpha=0.5)+
+  ggrepel::geom_label_repel(size=3,stat="stratum", label.strata = TRUE)+
+  # geom_label(stat = "stratum", label.strata = TRUE) +
+  scale_x_discrete(limits = c("Segment", "Channel","Consideration"))+
+  ggtitle("Ownership and Consideration - by Segment")
+```
+
+The second attempt is to use a more simple and 'no frills' package called alluvial. The level of customisability is relatively low compared to ggalluvial, but I imagine that any detailed fine-tuning is better done on a vector graphics editor (e.g. Inkscape) than on R. Below shows the 'official' example of an alluvial chart using the standard Titanic dataset, highlighting 3rd class male passengers onboard the Titanic, and how more died than survived: 
+
+```{r}
+require(alluvial)
+titanic_df <- as.data.frame(Titanic)
+
+titanic_df %>% glimpse()
+
+titanic_df %>%
+  .[,1:4] %>%
+  alluvial::alluvial(freq=titanic_df$Freq,
+           border=NA,
+           hide = titanic_df$Freq < quantile(titanic_df$Freq, .50),
+           col=ifelse(titanic_df$Class == "3rd" & titanic_df$Sex == "Male",
+                    "red",
+                    "gray"))
+
+```
+
+I thought this was much easier to read compared to our first attempt using ggalluvial - which signifies in a way the importance of *emphasis*, or *contrast*, i.e. graphics are much clearer if you do not highlight everything.
+
+Below shows an attempt of visualising our original simulated dataset, highlighting the opportunity for an insurance business that provides benefits through employer. However, the output is messy:
+
+```{r}
+sample_df1_summed %>%
+  .[,1:4] %>%
+  mutate_at(vars(contains("status")),funs(ifelse(is.na(.)," ",.))) %>%
+  alluvial::alluvial(freq=sample_df1_summed$n,
+           border=0,
+           hide=FALSE,
+           col=ifelse((sample_df1_summed$own_product=="Own" &
+                        sample_df1_summed$own_status!="Through employer") |
+                        (sample_df1_summed$own_product=="Do not own" &
+                        sample_df1_summed$consider_status=="Consider"),
+                      "red",
+                      "gray"))
+```
+
+The alternative is to highlight opportunity explicitly, rather than display consideration. 
+
+```{r}
+sample_df1_summed %>%
+  mutate(opportunity_status=case_when(consider_status=="Consider"~"Yes",
+                                      consider_status=="Do not consider"~"No",
+                                      own_status!="Through employer"~"Yes",
+                                      TRUE~"No")) %>%
+  mutate_at(vars(-n),funs(str_replace_all(.," ","\n ")))-> sample_df1_summed2
+
+sample_df1_summed2 %>%
+  select(-n,-consider_status) %>%
+  mutate_at(vars(contains("status")),funs(ifelse(is.na(.)," ",.))) %>%
+  
+  alluvial::alluvial(freq=sample_df1_summed$n,
+           border=ifelse(sample_df1_summed2$opportunity_status=="Yes","#0ccc6f","gray"),
+           # hide=is.na(sample_df1_summed2$own_status),
+           cex=0.7,col=ifelse(sample_df1_summed2$opportunity_status=="Yes","#0ccc6f","gray"))
+```
+
+The customization of graphics using alluvial::alluvial() is still relatively clunky. However, it is possible to use this for more simple applications:
+(Note that alluvial_x() is adapted from alluvial() to return a plot that allows SVG export)
+
+```{r}
+tibble(Segments=sample(c("Segment\n A","Segment\n B","Segment\n C"),1000,replace=TRUE),
+       Use_Product=sample(c("Yes","No"),1000,replace=TRUE,prob = c(0.75,0.25))) %>%
+  count(Segments,Use_Product) %>%
+  mutate(colour=ifelse(Use_Product=="Yes","#0ccc6f","gray"))-> sample_df2
+
+sample_df2 %>%
+  select(-n,-colour) %>%
+  alluvial_x(freq=sample_df2$n,
+                     col=sample_df2$colour)-> output_alluv02
+```
+
+Since the plots can be exported as vector (SVG) images, there is a high-level of customisability if there is a need to make these graphics look print-ready. These vector images can be edited using Inkscape or Adobe Illustrator. 
+
+```{r}
+svglite::svglite("Output/output_alluv02.svg")
+output_alluv02
+dev.off()
+```
+
+Interactive Sankey Plots - using D3
+```{r}
+require(networkD3)
+nodes = data.frame("name" = 
+ c("Node A", # Node 0
+ "Node B", # Node 1
+ "Node C", # Node 2
+ "Node D"))# Node 3
+
+links = as.data.frame(matrix(c(
+ 0, 1, 10, # Each row represents a link. The first number
+ 0, 2, 20, # represents the node being connected from. 
+ 1, 3, 30, # the second number represents the node connected to.
+ 2, 3, 40),# The third number is the value of the node
+ byrow = TRUE, ncol = 3))
+
+names(links) = c("source", "target", "value")
+
+sankeyNetwork(Links = links, Nodes = nodes,
+ Source = "source", Target = "target",
+ Value = "value", NodeID = "name",
+ fontSize= 12, nodeWidth = 30)
+```
+
+
+The equivalent from our simulated dataset would be:
+```{r}
+tibble(Segments=sample(c("Segment A","Segment B","Segment C"),1000,replace=TRUE),
+       Use_Product=sample(c("Yes","No"),1000,replace=TRUE,prob = c(0.75,0.25))) %>%
+  count(Segments,Use_Product)-> sample_df3
+
+nodes_df3 <- data.frame(name=c(unique(sample_df3$Segments),unique(sample_df3$Use_Product)))
+
+sample_df3 %>%
+  mutate_at(vars(-n),funs(look_up(.,mutate(nodes_df3,id=0:4),"name"))) %>%
+  mutate_all(funs(as.numeric)) %>%
+  as.data.frame() ->links_df3
+
+names(links_df3) <- c("source", "target", "value")
+
+# links_df3
+# nodes_df3
+
+sankeyNetwork(Links = links_df3, Nodes = nodes_df3,
+ Source = "source", Target = "target",
+ Value = "value", NodeID = "name",
+ fontSize= 12, nodeWidth = 86)
+
+```
+
+
+Whilst these plots are interactive, most deliverables are required in static PPT, and there isn't a readily available method to convert these plots to SVG format. More work is also required to display the data values as part of the plot.
+
+```{r}
+nodes = data.frame("name" = 
+ c("Segment A", # Node 0
+ "Segment B", # Node 1
+ "Segment C", # Node 2
+ "Yes", # Node 3
+ "No")) # Node 4
+
+links = as.data.frame(matrix(c(
+ 0, 3, 90, # Each row represents a link. The first number
+ 0, 4, 248, # represents the node being connected from. 
+ 1, 3, 86, # the second number represents the node connected to.
+ 1, 4, 243, # The third number is the value of the node
+ 2, 3, 86,
+ 2, 4, 247),
+ byrow = TRUE, ncol = 3))
+
+names(links) = c("source", "target", "value")
+
+sankeyNetwork(Links = links, Nodes = nodes,
+ Source = "source", Target = "target",
+ Value = "value", NodeID = "name",
+ fontSize= 12, nodeWidth = 30)
+```
+
+The final method to try is googleVis. The googleVis package provides an interface between R and the Google Charts API. Google Charts offer interactive charts which can be embedded into webpages. Running the following code loads the graphic in a browser:
+
+```{r}
+require(googleVis)
+sample_df3 %>%
+  gvisSankey(from="Segments", to="Use_Product", weight="n",
+             options=list(sankey="{link: {color: { fill: '#d799ae' } },
+                            node: { color: { fill: '#a61d4c' },
+                            label: { color: '#871b47' } }}")) %>% plot()
+
+```
+
+Although this works well in terms of providing interactive charts with a "hover tooltip" function, there are considerable limitations in terms of how elements of the chart may be customised, as well as limited export options.
+
+Having reviewed the various visualisation engines, it may be the case that the functions offered by the alluvial and ggalluvial packages are the most suitable for us due to their high customisability. Interactivity may be a feature that needs to be traded off, as at the time of writing even plotly doesn't offer support to convert ggplot2-style alluvial charts to interactive plotly versions. 
+
+Let us revisit the alluvial / ggalluvial solutions again. 
+
+```{r}
+sample_df3 %>%
+  mutate_at(vars(-n),funs(str_replace_all(.," ","\n "))) %>%
+  ggplot(aes(y=n,axis1=Segments,axis2=Use_Product))+
+  geom_alluvium(aes(fill=Use_Product),width=1/4) +
+  geom_stratum(width=1/4,fill="white",color="black")+
+  geom_text(size=3,stat = "stratum", label.strata = TRUE) +
+  scale_x_discrete(limits = c("Segment", "Use Product"))+
+  ggtitle("Product Usage - by Segment")
+```
+
+
+Another example:
+```{r}
+sample_df3 %>%
+  mutate_at(vars(-n),funs(str_replace_all(.," ","\n "))) %>%
+  ggplot(aes(y=n,axis1=Segments,axis2=Use_Product))+
+  geom_stratum()+
+  geom_text(stat="stratum",label.strata=TRUE)+
+  scale_x_discrete(limits=c("Segment", "Use Product"))+
+  geom_flow(aes(fill=Use_Product,alpha=Segments),stat="alluvium",
+            aes.bind=TRUE,lode.guidance="rightward")+
+  ggtitle("Product Usage - by Segment")
+```
+
+Riverplot option
+```{r}
+library( riverplot )
+data( minard )
+nodes <- minard$nodes
+edges <- minard$edges
+colnames( nodes ) <- c( "ID", "x", "y" )
+colnames( edges ) <- c( "N1", "N2", "Value", "direction" )
+# color the edges by troop movement direction
+edges$col <- c( "#e5cbaa", "black" )[ factor( edges$direction ) ]
+# color edges by their color rather than by gradient between the nodes
+edges$edgecol <- "col"
+ 
+# generate the riverplot object
+river <- makeRiver( nodes, edges )
+style <- list( edgestyle= "straight", nodestyle= "invisible" )
+# plot the generated object
+plot( river, lty= 1, default.style= style )
+# Add cities
+with( minard$cities, points( Longitude, Latitude, pch= 19 ) )
+with( minard$cities, text( Longitude, Latitude, Name, adj= c( 0, 0 ) ) )
+
+```
+
+
+
